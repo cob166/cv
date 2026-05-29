@@ -1,9 +1,13 @@
 ﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>金典国际百货商城</title>
+
+<link rel="shortcut icon" href="favicon.ico">
+
+<title>北京天瑞祥珠宝</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
 :root{--gold:#4FC3F7;--gold2:#81D4FA;--gold3:#0277BD;--bg:#0A1628;--line:rgba(79,195,247,0.22);--text:#E3F2FD;--dim:#7BA7C2;}
@@ -96,7 +100,7 @@ canvas.chart{position:absolute;inset:0;width:100%;height:100%;}@keyframes fu{0%{
 </style></head><body>
 <div class="topbar">
   <div style="min-width:80px"></div>
-  <div class="brand-center"><div class="brand-zh">金典国际百货商城 · 今日回收价</div><div class="brand-sub">PRECIOUS METALS · LIVE QUOTES</div></div>
+  <div class="brand-center"><div class="brand-zh">北京天瑞祥珠宝 · 今日回收价</div><div class="brand-sub">PRECIOUS METALS · LIVE QUOTES</div></div>
   <div class="topright"><button class="fs-btn" onclick="toggleFS()" title="全屏">[ ]</button></div>
 </div>
 <div class="noticebar" id="noticebar" style="display:none"><span class="notice-icon">📢</span><div class="notice-wrap"><span class="notice-text" id="noticeText"></span></div></div>
@@ -141,8 +145,25 @@ var _ws=null,_wsLastTime=Date.now();
 var _reconnecting=false;
 var _preConnectTimer=null;
 var WS_LIFETIME=3*60*1000+50*1000;
-var FB_URL='https://zccv-bffca-default-rtdb.asia-southeast1.firebasedatabase.app/adj.json';
-var FB_NOTICE='https://zccv-bffca-default-rtdb.asia-southeast1.firebasedatabase.app/notice.json';
+var 
+
+
+
+FB_URL='https://zccv-bffca-default-rtdb.asia-southeast1.firebasedatabase.app/shop2/adj.json';
+
+
+
+
+var 
+
+
+
+
+
+FB_NOTICE='https://zccv-bffca-default-rtdb.asia-southeast1.firebasedatabase.app/shop2/notice.json';
+
+
+
 var KEYS=['gold','silver','platinum','palladium','au999','18k','pt950','pd990'];
 var adj={gold:{mode:'fix',pct:0,fix:0},silver:{mode:'fix',pct:0,fix:0},platinum:{mode:'fix',pct:0,fix:0},palladium:{mode:'fix',pct:0,fix:0},au999:{mode:'fix',pct:0,fix:0},'18k':{mode:'fix',pct:0,fix:0},pt950:{mode:'fix',pct:0,fix:0},pd990:{mode:'fix',pct:0,fix:0}};
 var prev={},lastPrice={};
@@ -152,7 +173,7 @@ var chartCounters={gold:0,silver:0,platinum:0,palladium:0,au999:0,'18k':0,pt950:
 function $(id){return document.getElementById(id)}
 function setStatus(cls,txt){$('dot').className='dot '+(cls||'');$('stxt').textContent=txt}
 function toggleFS(){if(!document.fullscreenElement){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}else{document.exitFullscreen&&document.exitFullscreen()}}
-var step1Done=false,step1Timer=null,pwdTimer=null,PASSWORD='a123456a';
+var step1Done=false,step1Timer=null,pwdTimer=null,PASSWORD='030201';
 function triggerStep1(){step1Done=true;clearTimeout(step1Timer);step1Timer=setTimeout(function(){step1Done=false;},8000);}
 function triggerStep2(){if(!step1Done)return;step1Done=false;clearTimeout(step1Timer);showPwdInput();}
 function showPwdInput(){var w=$('pwdWrap'),i=$('pwdInput');w.classList.add('show');i.value='';setTimeout(function(){i.focus();},100);clearTimeout(pwdTimer);pwdTimer=setTimeout(hidePwdInput,6000);}
@@ -172,7 +193,7 @@ function startNotice(text,speed){
   },80);
 }
 function loadLocal(){
-  try{var s=localStorage.getItem('jdAdj5');
+  try{var s=localStorage.getItem('jdAdj_shop2');
     if(s){var d=JSON.parse(s);KEYS.forEach(function(k){if(d[k]){adj[k].mode=d[k].mode||'fix';adj[k].pct=d[k].pct||0;adj[k].fix=d[k].fix!==undefined?d[k].fix:0;}});}
   }catch(e){}
   KEYS.forEach(function(k){$('sp-'+k).value=adj[k].pct;$('sf-'+k).value=adj[k].fix;setMode(k,adj[k].mode,true);refreshValUI(k);});
@@ -181,7 +202,7 @@ function applyAdjData(d){
   if(!d)return;KEYS.forEach(function(k){if(d[k]){adj[k].mode=d[k].mode||'fix';adj[k].pct=d[k].pct||0;adj[k].fix=d[k].fix!==undefined?d[k].fix:0;}});
   KEYS.forEach(function(k){$('sp-'+k).value=adj[k].pct;$('sf-'+k).value=adj[k].fix;setMode(k,adj[k].mode,true);refreshValUI(k);});
   KEYS.forEach(function(k){if(lastPrice[k])renderCard(k,lastPrice[k]);});
-  try{localStorage.setItem('jdAdj5',JSON.stringify(adj));}catch(e){}
+  try{localStorage.setItem('jdAdj_shop2',JSON.stringify(adj));}catch(e){}
 }
 var lastNoticeText='',lastNoticeSpeed=0;
 function applyNoticeData(n){
@@ -217,7 +238,7 @@ function saveToFirebase(){
   var p2=fetch(FB_NOTICE,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:noticeVal,speed:noticeSpeed})}).then(function(r){return r.json();});
   Promise.all([p1,p2]).then(function(res){
     if(res[0]){tip.className='pp-sync ok';tip.textContent='✓ 已同步，所有人立即更新';
-      try{localStorage.setItem('jdAdj5',JSON.stringify(adj));}catch(e){}
+      try{localStorage.setItem('jdAdj_shop2',JSON.stringify(adj));}catch(e){}
       if(noticeVal){$('noticebar').style.display='flex';startNotice(noticeVal,noticeSpeed);}else{$('noticebar').style.display='none';}
       setTimeout(function(){tip.textContent=''},4000);
     }else{tip.className='pp-sync err';tip.textContent='✗ 同步失败';}
