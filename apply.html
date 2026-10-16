@@ -48,7 +48,8 @@
 <body>
 <main>
   <h1>顾客信息登记</h1>
-  <p class="lead">请如实填写，提交后由店员核对证件并确认。</p>
+  <p class="lead">请如实填写，提交后资料会逐项显示在店员页面，由店员核对。</p>
+  <div class="box" style="margin-bottom:14px;font-size:14px;line-height:1.7">登记时间：<strong id="stamp"></strong></div>
 
   <div class="box" id="formbox">
     <label class="f" for="name">姓名</label>
@@ -57,6 +58,26 @@
     <label class="f" for="idno">身份证号码</label>
     <input id="idno" type="text" inputmode="text" autocomplete="off" autocapitalize="characters"
            spellcheck="false" maxlength="18" placeholder="18 位号码">
+
+    <label class="f" for="mobile">手机号码</label>
+    <input id="mobile" type="text" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="请输入联系电话">
+
+    <label class="f" for="address">居住地址</label>
+    <input id="address" type="text" autocomplete="street-address" maxlength="120" placeholder="请输入居住地址">
+
+    <label class="f" for="itemtype">物品品种</label>
+    <input id="itemtype" type="text" maxlength="80" placeholder="请输入物品品种">
+
+    <label class="f" for="photo">物品照片（仅 1 张）</label>
+    <input id="photo" type="file" accept="image/*" capture="environment" style="width:100%;margin-bottom:14px">
+    <img id="preview" alt="物品照片预览" style="display:none;width:100%;max-height:260px;object-fit:contain;border:1px solid var(--line);border-radius:8px;margin-bottom:16px">
+
+    <label class="f">承诺书</label>
+    <div style="font-size:13px;line-height:1.8;margin-bottom:12px">本人自愿卖掉自己的私有物品，该物品来源合法，属于我个人所有，不是盗取、骗取和来路不明物品。如今后发现该物品涉及刑、民事纠纷等，我个人愿意承担一切责任。<br>因货物构成犯法或个人争议，一律由确认签字人承担，与本店无关。特此承诺！</div>
+    <label class="agree"><input id="readit" type="checkbox"><span>本人已阅读以上温馨提示</span></label>
+    <label class="f">承诺人手写签名</label>
+    <canvas id="sign" width="700" height="180" style="width:100%;height:130px;border:1px solid var(--line);border-radius:8px;touch-action:none;background:#fff"></canvas>
+    <button type="button" id="clearSign" style="margin:8px 0 16px;background:transparent;color:var(--ink);border-color:var(--line)">清除签名重写</button>
 
     <label class="agree">
       <input id="agree" type="checkbox">
@@ -68,7 +89,7 @@
   </div>
 
   <p class="note">
-    信息通过加密连接传送，店员核对后才会保存。未被确认的提交会在一天内自动删除。
+    顾客资料、物品照片和签名会先临时传给店员核对；确认存档后，服务器只长期保存登记文字资料和物品明细，不保存顾客照片、签名或登记图片。
   </p>
 </main>
 
@@ -98,6 +119,17 @@
 
   var $ = function(id){ return document.getElementById(id); };
   function show(t, cls){ var m = $("msg"); m.textContent = t; m.className = cls; }
+  function stamp(){ var d=new Date(); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2)+" "+("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2)+":"+("0"+d.getSeconds()).slice(-2); }
+  $("stamp").textContent = stamp();
+  var sign=$("sign"), sg=sign.getContext("2d"), drawing=false, signed=false;
+  sg.strokeStyle="#111"; sg.lineWidth=4; sg.lineCap="round"; sg.lineJoin="round";
+  function pos(e){var r=sign.getBoundingClientRect();return {x:(e.clientX-r.left)*sign.width/r.width,y:(e.clientY-r.top)*sign.height/r.height};}
+  sign.addEventListener("pointerdown",function(e){drawing=true; signed=true; sign.setPointerCapture(e.pointerId);var p=pos(e);sg.beginPath();sg.moveTo(p.x,p.y);});
+  sign.addEventListener("pointermove",function(e){if(!drawing)return;var p=pos(e);sg.lineTo(p.x,p.y);sg.stroke();});
+  sign.addEventListener("pointerup",function(){drawing=false;}); sign.addEventListener("pointercancel",function(){drawing=false;});
+  $("clearSign").addEventListener("click",function(){sg.clearRect(0,0,sign.width,sign.height);signed=false;});
+  $("photo").addEventListener("change",function(){var f=this.files&&this.files[0];if(!f){$("preview").style.display="none";return;} if(!f.type.startsWith("image/")){show("请选择图片文件。","err");this.value="";return;} var r=new FileReader();r.onload=function(){ $("preview").src=r.result;$("preview").style.display="block";};r.readAsDataURL(f);});
+  function readPhoto(){return new Promise(function(resolve,reject){var f=$("photo").files&&$("photo").files[0];if(!f){resolve("");return;}var r=new FileReader();r.onload=function(){resolve(String(r.result));};r.onerror=reject;r.readAsDataURL(f);});}
 
   $("send").addEventListener("click", function(){
     var name = $("name").value.trim();
@@ -105,19 +137,28 @@
     if (!name) { show("请填写姓名。", "err"); return; }
     var p = idProblem(idno);
     if (p) { show(p, "err"); return; }
-    if (!$("agree").checked) { show("请先勾选同意。", "err"); return; }
+    var mobile = $("mobile").value.trim(), address = $("address").value.trim(), itemtype = $("itemtype").value.trim();
+    if (!/^1[3-9]\d{9}$/.test(mobile)) { show("请填写正确的 11 位手机号码。", "err"); return; }
+    if (!address) { show("请填写居住地址。", "err"); return; }
+    if (!itemtype) { show("请填写物品品种。", "err"); return; }
+    if (!$("photo").files || !$("photo").files[0]) { show("请拍摄或选择 1 张物品照片。", "err"); return; }
+    if (!$("readit").checked) { show("请先勾选已阅读承诺书。", "err"); return; }
+    if (!signed) { show("请在签名框内手写签名。", "err"); return; }
+    if (!$("agree").checked) { show("请先勾选信息使用同意。", "err"); return; }
     if (/你的/.test(API_BASE)) { show("页面还没有配置提交地址，请告知店员。", "err"); return; }
 
     var btn = $("send"); btn.disabled = true; show("正在提交…", "ok");
-    fetch(API_BASE.replace(/\/+$/, "") + "/submit", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({name: name, idno: idno})
+    Promise.all([readPhoto()]).then(function(values){
+      return fetch(API_BASE.replace(/\/+$/, "") + "/submit", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name:name,idno:idno,mobile:mobile,address:address,itemtype:itemtype,submittedAt:$("stamp").textContent,photo:values[0],signature:sign.toDataURL("image/png"),readit:true})
+      });
     }).then(function(res){
       return res.json().catch(function(){ return {}; }).then(function(j){
         if (res.ok && j.ok) {
           show("已提交。请告知店员，由店员核对后确认。", "ok");
-          $("name").value = ""; $("idno").value = ""; $("agree").checked = false;
+          $("name").value = ""; $("idno").value = ""; $("mobile").value=""; $("address").value=""; $("itemtype").value=""; $("photo").value=""; $("preview").style.display="none"; $("agree").checked = false; $("readit").checked=false; sg.clearRect(0,0,sign.width,sign.height); signed=false;
           setTimeout(function(){ btn.disabled = false; }, 4000);
         } else {
           show(j.error || "提交失败，请重试。", "err"); btn.disabled = false;
