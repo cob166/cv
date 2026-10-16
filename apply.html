@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>顾客信息登记</title>
+<style>
+  :root{
+    --bg:#f5f3ee; --card:#ffffff; --ink:#1d2421; --sub:#6b726e; --line:#dcd8cd;
+    --ok:#1f6f4a; --okbg:#e3f1e9; --bad:#b3261e; --badbg:#fbe9e7;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#161a18; --card:#1f2421; --ink:#e8ebe9; --sub:#9aa39e; --line:#333a36;
+      --ok:#5fcf9a; --okbg:#1c3328; --bad:#ff8a80; --badbg:#3a2220;}
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+    min-height:100vh; display:flex; justify-content:center; align-items:flex-start;
+    padding:max(24px,env(safe-area-inset-top)) 16px 40px;
+  }
+  main{width:100%; max-width:480px; margin-top:6vh}
+  h1{font-size:22px; margin:0 0 6px}
+  .lead{color:var(--sub); font-size:14px; margin:0 0 20px; line-height:1.6}
+  .box{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px}
+  label.f{display:block; font-size:14px; margin:0 0 8px}
+  input[type=text]{
+    width:100%; font-size:20px; padding:12px 14px; border-radius:8px; margin-bottom:16px;
+    border:1px solid var(--line); background:transparent; color:var(--ink);
+  }
+  #idno{font-family:ui-monospace,Menlo,Consolas,monospace; letter-spacing:.06em}
+  input:focus-visible,button:focus-visible{outline:2px solid var(--ok); outline-offset:2px}
+  .agree{display:flex; gap:10px; align-items:flex-start; font-size:14px; line-height:1.6; margin-bottom:16px}
+  .agree input{margin-top:4px; width:18px; height:18px; flex:0 0 18px}
+  button{
+    width:100%; font-size:17px; padding:13px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--ink); background:var(--ink); color:var(--bg);
+  }
+  button:disabled{opacity:.5; cursor:default}
+  #msg{margin-top:14px; padding:12px 14px; border-radius:8px; font-size:15px; display:none; line-height:1.6}
+  #msg.ok{display:block; background:var(--okbg); color:var(--ok)}
+  #msg.err{display:block; background:var(--badbg); color:var(--bad)}
+  .note{font-size:12px; color:var(--sub); line-height:1.7; margin-top:18px}
+</style>
+</head>
+<body>
+<main>
+  <h1>顾客信息登记</h1>
+  <p class="lead">请如实填写，提交后由店员核对证件并确认。</p>
+
+  <div class="box" id="formbox">
+    <label class="f" for="name">姓名</label>
+    <input id="name" type="text" autocomplete="name" maxlength="20" placeholder="与身份证一致">
+
+    <label class="f" for="idno">身份证号码</label>
+    <input id="idno" type="text" inputmode="text" autocomplete="off" autocapitalize="characters"
+           spellcheck="false" maxlength="18" placeholder="18 位号码">
+
+    <label class="agree">
+      <input id="agree" type="checkbox">
+      <span>我同意商家仅为办理业务登记、核对身份的目的收集和使用以上信息。</span>
+    </label>
+
+    <button id="send">提交</button>
+    <div id="msg" role="status" aria-live="polite"></div>
+  </div>
+
+  <p class="note">
+    信息通过加密连接传送，店员核对后才会保存。未被确认的提交会在一天内自动删除。
+  </p>
+</main>
+
+<script>
+(function(){
+  // 部署 Worker 后，把这里改成你的 Worker 地址，例如 https://idcard.xxx.workers.dev
+  var API_BASE = "https://idcard.a1269136698a.workers.dev";
+
+  var W = [7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2];
+  var C = ["1","0","X","9","8","7","6","5","4","3","2"];
+  var PROV = {11:1,12:1,13:1,14:1,15:1,21:1,22:1,23:1,31:1,32:1,33:1,34:1,35:1,36:1,37:1,
+              41:1,42:1,43:1,44:1,45:1,46:1,50:1,51:1,52:1,53:1,54:1,61:1,62:1,63:1,64:1,65:1,
+              71:1,81:1,82:1};
+
+  function idProblem(s){
+    if (!/^\d{17}[\dX]$/.test(s)) return "身份证号码应为 18 位（最后一位可以是 X），请检查。";
+    if (!PROV[parseInt(s.slice(0,2),10)]) return "号码前两位不正确，请检查。";
+    var y = +s.slice(6,10), m = +s.slice(10,12), d = +s.slice(12,14);
+    var dt = new Date(y, m-1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== m-1 || dt.getDate() !== d || dt > new Date() || y < 1900)
+      return "号码里的出生日期不正确，请检查。";
+    var sum = 0;
+    for (var i = 0; i < 17; i++) sum += +s[i] * W[i];
+    if (C[sum % 11] !== s[17]) return "号码校验没有通过，可能输错了某一位，请对照证件再检查。";
+    return "";
+  }
+
+  var $ = function(id){ return document.getElementById(id); };
+  function show(t, cls){ var m = $("msg"); m.textContent = t; m.className = cls; }
+
+  $("send").addEventListener("click", function(){
+    var name = $("name").value.trim();
+    var idno = $("idno").value.trim().toUpperCase();
+    if (!name) { show("请填写姓名。", "err"); return; }
+    var p = idProblem(idno);
+    if (p) { show(p, "err"); return; }
+    if (!$("agree").checked) { show("请先勾选同意。", "err"); return; }
+    if (/你的/.test(API_BASE)) { show("页面还没有配置提交地址，请告知店员。", "err"); return; }
+
+    var btn = $("send"); btn.disabled = true; show("正在提交…", "ok");
+    fetch(API_BASE.replace(/\/+$/, "") + "/submit", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({name: name, idno: idno})
+    }).then(function(res){
+      return res.json().catch(function(){ return {}; }).then(function(j){
+        if (res.ok && j.ok) {
+          show("已提交。请告知店员，由店员核对后确认。", "ok");
+          $("name").value = ""; $("idno").value = ""; $("agree").checked = false;
+          setTimeout(function(){ btn.disabled = false; }, 4000);
+        } else {
+          show(j.error || "提交失败，请重试。", "err"); btn.disabled = false;
+        }
+      });
+    }).catch(function(){
+      show("网络不通，请检查网络后重试。", "err"); btn.disabled = false;
+    });
+  });
+})();
+</script>
+</body>
+</html>

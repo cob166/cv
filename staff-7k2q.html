@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>身份证号码校验</title>
+<style>
+  :root{
+    --bg:#f5f3ee; --card:#ffffff; --ink:#1d2421; --sub:#6b726e; --line:#dcd8cd;
+    --ok:#1f6f4a; --okbg:#e3f1e9; --bad:#b3261e; --badbg:#fbe9e7;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#161a18; --card:#1f2421; --ink:#e8ebe9; --sub:#9aa39e; --line:#333a36;
+      --ok:#5fcf9a; --okbg:#1c3328; --bad:#ff8a80; --badbg:#3a2220;}
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+    min-height:100vh; display:flex; justify-content:center; align-items:flex-start;
+    padding:max(24px,env(safe-area-inset-top)) 16px 40px;
+  }
+  main{width:100%; max-width:480px; margin-top:6vh}
+  h1{font-size:22px; margin:0 0 6px; letter-spacing:.02em}
+  .lead{color:var(--sub); font-size:14px; margin:0 0 20px; line-height:1.6}
+  .box{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px}
+  label{display:block; font-size:14px; margin-bottom:8px}
+  input{
+    width:100%; font-size:20px; padding:12px 14px; border-radius:8px;
+    border:1px solid var(--line); background:transparent; color:var(--ink);
+    font-family:ui-monospace,Menlo,Consolas,monospace; letter-spacing:.06em;
+  }
+  input:focus-visible,button:focus-visible{outline:2px solid var(--ok); outline-offset:2px}
+  .row{display:flex; gap:10px; margin-top:12px}
+  button{
+    flex:1; font-size:16px; padding:12px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--ink); background:var(--ink); color:var(--bg);
+  }
+  button.ghost{background:transparent; color:var(--ink); border-color:var(--line); flex:0 0 88px}
+  #result{margin-top:16px; display:none}
+  .status{padding:12px 14px; border-radius:8px; font-weight:600; font-size:16px}
+  .status.ok{background:var(--okbg); color:var(--ok)}
+  .status.bad{background:var(--badbg); color:var(--bad)}
+  dl{margin:14px 0 0; display:grid; grid-template-columns:5.5em 1fr; gap:8px 12px; font-size:15px}
+  dt{color:var(--sub)} dd{margin:0}
+  ul.checks{list-style:none; padding:0; margin:14px 0 0; font-size:14px}
+  ul.checks li{padding:4px 0}
+  ul.checks .y{color:var(--ok)} ul.checks .n{color:var(--bad)}
+  .note{font-size:12px; color:var(--sub); line-height:1.7; margin-top:18px}
+  .scan{margin-bottom:18px; padding-bottom:18px; border-bottom:1px solid var(--line)}
+  .scan input[type=file]{display:none}
+  .scan .pick{
+    display:block; text-align:center; font-size:16px; padding:12px; border-radius:8px; cursor:pointer;
+    border:1px dashed var(--sub); color:var(--ink);
+  }
+  .scan .pick:focus-within{outline:2px solid var(--ok); outline-offset:2px}
+  #preview{display:none; width:100%; max-height:200px; object-fit:contain; margin-top:12px; border-radius:6px}
+  #ocrmsg{font-size:13px; color:var(--sub); margin-top:10px; min-height:1.4em; line-height:1.6}
+  #ocrmsg.err{color:var(--bad)}
+  .bar{height:4px; background:var(--line); border-radius:2px; margin-top:8px; overflow:hidden; display:none}
+  .bar i{display:block; height:100%; width:0; background:var(--ok); transition:width .2s}
+  #pendlist{margin-top:10px}
+  #pendlist .none{font-size:13px; color:var(--sub); line-height:1.6}
+  #pendlist button.pend{
+    display:flex; justify-content:space-between; width:100%; text-align:left; flex:none;
+    margin-top:8px; font-size:15px; padding:10px 12px; background:transparent;
+    color:var(--ink); border:1px solid var(--line);
+  }
+  #pendlist button.pend.on{border-color:var(--ok); background:var(--okbg)}
+  #pendlist button.pend span{color:var(--sub); font-size:13px}
+  #curbar{display:none; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; font-size:13px; color:var(--sub)}
+  #curbar button{flex:0 0 auto; padding:8px 12px; font-size:14px}
+  #cardbox{display:none; margin-top:16px}
+  #card{width:100%; height:auto; border-radius:8px; border:1px solid var(--line)}
+  input.pw{font-size:16px; letter-spacing:normal; font-family:inherit; margin-top:12px}
+  #upmsg{font-size:13px; margin-top:10px; min-height:1.4em; color:var(--sub)}
+  #upmsg.err{color:var(--bad)} #upmsg.ok{color:var(--ok)}
+  input.name{font-size:18px; letter-spacing:.04em; font-family:inherit; margin-bottom:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>身份证号码校验</h1>
+  <p class="lead">检查号码格式、地区码、出生日期和校验位是否合规。</p>
+
+  <div class="box">
+    <div class="scan">
+      <label for="pw">店员密码</label>
+      <input id="pw" class="pw" type="password" autocomplete="off" placeholder="输入后可查看顾客提交，也用于上传">
+      <div class="row"><button id="refresh" class="ghost" style="flex:1">查看顾客提交</button></div>
+      <div id="pendlist"></div>
+      <div id="curbar">
+        <span id="curtxt"></span>
+        <button id="rej" class="ghost">删除这条</button>
+      </div>
+    </div>
+
+    <div class="scan">
+      <label class="pick" for="photo">拍照 / 选择身份证照片（人像面）</label>
+      <input id="photo" type="file" accept="image/*">
+      <img id="preview" alt="身份证照片预览">
+      <div class="bar" id="bar"><i id="barfill"></i></div>
+      <div id="ocrmsg" aria-live="polite"></div>
+    </div>
+
+    <label for="name">姓名（识别后可手动修改）</label>
+    <input id="name" class="name" autocomplete="off" spellcheck="false" placeholder="识别后自动填入">
+
+    <label for="idno">身份证号码（18 位，或 15 位旧号）</label>
+    <input id="idno" inputmode="text" autocomplete="off" autocapitalize="characters"
+           spellcheck="false" maxlength="18" placeholder="请输入号码">
+    <div class="row">
+      <button id="go">校验</button>
+      <button id="clear" class="ghost">清空</button>
+    </div>
+
+    <div id="result" aria-live="polite">
+      <div id="status" class="status"></div>
+      <ul id="checks" class="checks"></ul>
+      <dl id="info"></dl>
+
+      <div id="cardbox">
+        <canvas id="card" width="900" height="520"></canvas>
+        <div class="row">
+          <button id="save" class="ghost" style="flex:1">保存到手机</button>
+          <button id="up" style="flex:1">上传到云端</button>
+        </div>
+        <div id="upmsg" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    校验和照片识别都在你的浏览器里完成，照片不会上传。
+    只有点击“上传到云端”时，生成的资料卡片才会传到店里自己的私有存储。
+    首次识别需要下载识别组件（几 MB），之后浏览器会缓存。<br>
+    本工具只能判断号码“合不合规”，不能证明这个号码真的登记在某个人名下。
+    要核实真实身份，需要使用公安部门授权的实名核验接口。
+  </p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>
+(function(){
+  var PROVINCES = {
+    11:"北京",12:"天津",13:"河北",14:"山西",15:"内蒙古",
+    21:"辽宁",22:"吉林",23:"黑龙江",
+    31:"上海",32:"江苏",33:"浙江",34:"安徽",35:"福建",36:"江西",37:"山东",
+    41:"河南",42:"湖北",43:"湖南",44:"广东",45:"广西",46:"海南",
+    50:"重庆",51:"四川",52:"贵州",53:"云南",54:"西藏",
+    61:"陕西",62:"甘肃",63:"青海",64:"宁夏",65:"新疆",
+    71:"台湾",81:"香港",82:"澳门"
+  };
+  var WEIGHTS = [7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2];
+  var CHECK = ["1","0","X","9","8","7","6","5","4","3","2"];
+
+  function pad(n){ return n < 10 ? "0" + n : "" + n; }
+
+  function calcCheck(first17){
+    var sum = 0;
+    for (var i = 0; i < 17; i++) sum += parseInt(first17[i], 10) * WEIGHTS[i];
+    return CHECK[sum % 11];
+  }
+
+  function validDate(y, m, d){
+    var dt = new Date(y, m - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+  }
+
+  function validate(raw){
+    var s = raw.trim().toUpperCase();
+    var checks = [];
+    var converted = false;
+
+    // 15 位旧号：补 19 + 计算校验位，转成 18 位
+    if (/^\d{15}$/.test(s)) {
+      s = s.slice(0, 6) + "19" + s.slice(6);
+      s += calcCheck(s);
+      converted = true;
+    }
+
+    var fmtOk = /^\d{17}[\dX]$/.test(s);
+    checks.push({ok: fmtOk, text: "长度与字符：18 位，前 17 位为数字，末位为数字或 X"});
+    if (!fmtOk) return {valid:false, checks:checks};
+
+    var prov = parseInt(s.slice(0, 2), 10);
+    var provOk = !!PROVINCES[prov];
+    checks.push({ok: provOk, text: "地区码：前两位 " + s.slice(0, 2) + (provOk ? "（" + PROVINCES[prov] + "）" : " 不是有效的省级代码")});
+
+    var y = parseInt(s.slice(6, 10), 10), m = parseInt(s.slice(10, 12), 10), d = parseInt(s.slice(12, 14), 10);
+    var now = new Date();
+    var dateOk = validDate(y, m, d) && y >= 1900 && new Date(y, m - 1, d) <= now;
+    checks.push({ok: dateOk, text: "出生日期：" + y + "-" + pad(m) + "-" + pad(d) + (dateOk ? "" : " 不存在或晚于今天")});
+
+    var expect = calcCheck(s.slice(0, 17));
+    var sumOk = expect === s[17];
+    checks.push({ok: sumOk, text: "校验位：应为 " + expect + "，实际为 " + s[17]});
+
+    var valid = provOk && dateOk && sumOk;
+    var info = null;
+    if (provOk && dateOk) {
+      var age = now.getFullYear() - y;
+      if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) age--;
+      info = {
+        id18: s,
+        converted: converted,
+        province: PROVINCES[prov],
+        birth: y + " 年 " + m + " 月 " + d + " 日",
+        gender: parseInt(s[16], 10) % 2 === 1 ? "男" : "女",
+        age: age
+      };
+    }
+    return {valid:valid, checks:checks, info:info};
+  }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var input = $("idno"), result = $("result");
+
+  function esc(t){
+    return String(t).replace(/[&<>"]/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];
+    });
+  }
+
+  function run(){
+    var v = input.value;
+    if (!v.trim()) { result.style.display = "none"; return; }
+    var r = validate(v);
+    lastR = r;
+    result.style.display = "block";
+    $("cardbox").style.display = (r.valid && r.info) ? "block" : "none";
+    $("upmsg").textContent = "";
+    if (r.valid && r.info) drawCard();
+
+    var st = $("status");
+    st.className = "status " + (r.valid ? "ok" : "bad");
+    st.textContent = r.valid ? "号码合规" : "号码不合规";
+
+    $("checks").innerHTML = r.checks.map(function(c){
+      return '<li><span class="' + (c.ok ? "y" : "n") + '">' + (c.ok ? "通过" : "未通过") + "</span>　" + esc(c.text) + "</li>";
+    }).join("");
+
+    var dl = $("info");
+    if (r.info) {
+      var rows = [
+        ["归属省份", r.info.province],
+        ["出生日期", r.info.birth],
+        ["性别", r.info.gender],
+        ["年龄", r.info.age + " 岁"]
+      ];
+      if (r.info.converted) rows.push(["转换后号码", r.info.id18]);
+      dl.innerHTML = rows.map(function(x){
+        return "<dt>" + esc(x[0]) + "</dt><dd>" + esc(x[1]) + "</dd>";
+      }).join("");
+    } else {
+      dl.innerHTML = "";
+    }
+  }
+
+  $("go").addEventListener("click", run);
+  input.addEventListener("keydown", function(e){ if (e.key === "Enter") run(); });
+  $("clear").addEventListener("click", function(){
+    input.value = ""; $("name").value = ""; clearCur();
+    $("photo").value = ""; $("preview").style.display = "none";
+    $("ocrmsg").textContent = ""; $("bar").style.display = "none";
+    result.style.display = "none"; input.focus();
+  });
+
+  /* ---------- 资料卡片：绘制 / 保存 / 上传 ---------- */
+  // 部署 Worker 后，把这里改成你的 Worker 地址，例如 https://idcard.xxx.workers.dev
+  var UPLOAD_URL = "https://idcard.a1269136698a.workers.dev";
+
+  var lastR = null;
+  var cardCanvas = $("card");
+
+  function drawCard(){
+    if (!lastR || !lastR.info) return;
+    var i = lastR.info, c = cardCanvas, g = c.getContext("2d");
+    var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var bg = "#faf8f3", ink = "#1d2421", sub = "#6b726e", line = "#dcd8cd", accent = "#1f6f4a";
+
+    g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
+    g.strokeStyle = line; g.lineWidth = 2; g.strokeRect(20, 20, c.width - 40, c.height - 40);
+
+    var font = '"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
+    g.textBaseline = "alphabetic";
+
+    g.fillStyle = accent; g.font = "600 34px " + font;
+    g.fillText("顾客资料卡", 60, 90);
+
+    g.fillStyle = sub; g.font = "26px " + font;
+    var rows = [
+      ["姓名", ($("name").value || "").trim() || "未填写"],
+      ["身份证号", ""],
+      ["性别", i.gender],
+      ["出生日期", i.birth],
+      ["归属省份", i.province]
+    ];
+    var y = 160;
+    rows.forEach(function(r){
+      g.fillStyle = sub; g.font = "26px " + font; g.fillText(r[0], 60, y);
+      g.fillStyle = ink;
+      if (r[0] === "身份证号") {
+        g.font = "600 38px ui-monospace,Menlo,Consolas,monospace";
+        g.fillText(i.id18, 230, y + 2);
+      } else {
+        g.font = "600 30px " + font;
+        g.fillText(r[1], 230, y);
+      }
+      y += 66;
+    });
+
+    var d = new Date();
+    var ts = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " +
+             pad(d.getHours()) + ":" + pad(d.getMinutes());
+    g.fillStyle = sub; g.font = "22px " + font;
+    g.fillText("登记时间  " + ts, 60, c.height - 50);
+    g.fillText("号码校验：合规", c.width - 260, c.height - 50);
+  }
+
+  $("name").addEventListener("input", function(){
+    if (lastR && lastR.valid) drawCard();
+  });
+
+  function cardBlob(){
+    return new Promise(function(resolve){ cardCanvas.toBlob(resolve, "image/png"); });
+  }
+
+  $("save").addEventListener("click", function(){
+    cardBlob().then(function(b){
+      var a = document.createElement("a");
+      var d = new Date();
+      a.href = URL.createObjectURL(b);
+      a.download = "顾客资料-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+                   pad(d.getHours()) + pad(d.getMinutes()) + ".png";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 5000);
+    });
+  });
+
+  function setUp(t, cls){ var m = $("upmsg"); m.textContent = t; m.className = cls || ""; }
+
+  $("up").addEventListener("click", function(){
+    if (/你的/.test(UPLOAD_URL)) { setUp("还没有配置上传地址，请先部署 Worker 并修改 UPLOAD_URL。", "err"); return; }
+    var pw = $("pw").value;
+    if (!pw) { setUp("请输入上传密码。", "err"); return; }
+    var btn = $("up"); btn.disabled = true; setUp("正在上传…");
+    cardBlob().then(function(b){
+      var path = curId ? "/confirm?id=" + encodeURIComponent(curId) : "/upload";
+      return fetch(UPLOAD_URL.replace(/\/+$/, "") + path, {
+        method: "POST",
+        headers: {"Content-Type": "image/png", "X-Password": pw},
+        body: b
+      });
+    }).then(function(res){
+      return res.json().catch(function(){ return {}; }).then(function(j){
+        if (res.ok && j.ok) {
+          setUp("上传成功。", "ok");
+          if (curId) { clearCur(); loadPending(); }
+        } else setUp(j.error || ("上传失败（" + res.status + "）"), "err");
+      });
+    }).catch(function(){
+      setUp("网络错误，没能连接到上传地址。", "err");
+    }).then(function(){ btn.disabled = false; });
+  });
+
+  /* ---------- 顾客提交的待确认列表 ---------- */
+  var curId = null, pollTimer = null, pendItems = [];
+
+  function base(){ return UPLOAD_URL.replace(/\/+$/, ""); }
+
+  function clearCur(){
+    curId = null;
+    $("curbar").style.display = "none";
+  }
+
+  function fmtTime(ms){
+    var d = new Date(ms);
+    return pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function renderPending(){
+    var box = $("pendlist");
+    if (!pendItems.length) { box.innerHTML = '<div class="none">暂时没有顾客提交。</div>'; return; }
+    box.innerHTML = pendItems.map(function(it){
+      return '<button class="pend' + (it.id === curId ? " on" : "") + '" data-id="' + esc(it.id) + '">' +
+             esc(it.name) + "<span>" + esc(fmtTime(it.time)) + " 提交</span></button>";
+    }).join("");
+  }
+
+  function loadPending(){
+    var pw = $("pw").value;
+    if (!pw) { $("pendlist").innerHTML = '<div class="none">请先输入店员密码。</div>'; return; }
+    if (/你的/.test(UPLOAD_URL)) { $("pendlist").innerHTML = '<div class="none">还没有配置 UPLOAD_URL。</div>'; return; }
+    fetch(base() + "/pending", {headers: {"X-Password": pw}}).then(function(res){
+      if (res.status === 401) throw new Error("密码不正确");
+      if (!res.ok) throw new Error("读取失败（" + res.status + "）");
+      return res.json();
+    }).then(function(j){
+      pendItems = j.items || [];
+      if (curId && !pendItems.some(function(x){ return x.id === curId; })) clearCur();
+      renderPending();
+    }).catch(function(e){
+      var t = (e && e.message && e.message.indexOf("Failed") < 0) ? e.message : "网络错误";
+      $("pendlist").innerHTML = '<div class="none">' + esc(t) + "</div>";
+    });
+  }
+
+  function startPolling(){
+    loadPending();
+    if (pollTimer) return;
+    pollTimer = setInterval(function(){ if (!document.hidden && $("pw").value) loadPending(); }, 10000);
+  }
+
+  $("refresh").addEventListener("click", startPolling);
+  $("pw").addEventListener("change", startPolling);
+
+  $("pendlist").addEventListener("click", function(e){
+    var b = e.target.closest("button.pend");
+    if (!b) return;
+    var it = pendItems.filter(function(x){ return x.id === b.getAttribute("data-id"); })[0];
+    if (!it) return;
+    curId = it.id;
+    $("name").value = it.name;
+    input.value = it.idno;
+    run();
+    $("curtxt").textContent = "正在核对：" + it.name + "。请对照证件，确认无误后点下方“上传到云端”。";
+    $("curbar").style.display = "flex";
+    renderPending();
+  });
+
+  $("rej").addEventListener("click", function(){
+    if (!curId || !confirm("确定删除这条顾客提交吗？删除后无法恢复。")) return;
+    fetch(base() + "/reject?id=" + encodeURIComponent(curId), {
+      method: "POST", headers: {"X-Password": $("pw").value}
+    }).then(function(res){
+      if (!res.ok) throw new Error("x");
+      clearCur(); input.value = ""; $("name").value = ""; result.style.display = "none";
+      loadPending();
+    }).catch(function(){ alert("删除失败，请检查密码和网络。"); });
+  });
+
+  /* ---------- 拍照识别（Tesseract.js，本地运行） ---------- */
+  var worker = null;
+  var msg = $("ocrmsg"), bar = $("bar"), fill = $("barfill");
+
+  function setMsg(t, isErr){ msg.textContent = t; msg.className = isErr ? "err" : ""; }
+
+  function getWorker(){
+    if (worker) return Promise.resolve(worker);
+    if (typeof Tesseract === "undefined")
+      return Promise.reject(new Error("识别组件没有加载成功，请检查网络后刷新页面"));
+    return Tesseract.createWorker("chi_sim", 1, {
+      logger: function(m){
+        if (m.status === "recognizing text") {
+          fill.style.width = Math.round(m.progress * 100) + "%";
+          setMsg("正在识别… " + Math.round(m.progress * 100) + "%");
+        } else if (/loading/.test(m.status)) {
+          setMsg("正在加载识别组件（仅首次较慢）…");
+        }
+      }
+    }).then(function(w){ worker = w; return w; });
+  }
+
+  // 缩放并转成高对比度灰度图，提高识别率
+  function prepare(file){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        var maxW = 1800, scale = Math.min(1, maxW / img.width);
+        var c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        var ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        var d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
+        for (var i = 0; i < p.length; i += 4) {
+          var g = 0.299 * p[i] + 0.587 * p[i+1] + 0.114 * p[i+2];
+          g = (g - 128) * 1.3 + 128;
+          g = g < 0 ? 0 : g > 255 ? 255 : g;
+          p[i] = p[i+1] = p[i+2] = g;
+        }
+        ctx.putImageData(d, 0, 0);
+        resolve({canvas: c, url: url});
+      };
+      img.onerror = function(){ reject(new Error("图片读取失败")); };
+      img.src = url;
+    });
+  }
+
+  function fixDigits(s){
+    return s.replace(/[Oo〇]/g, "0").replace(/[Iil|丨]/g, "1")
+            .replace(/[Ss]/g, "5").replace(/B/g, "8").replace(/x/g, "X");
+  }
+
+  function parse(text){
+    var out = {name: "", id: ""};
+
+    // 号码：去掉所有空白后找 18 位；找不到再容错替换易混字符
+    var flat = text.replace(/\s+/g, "");
+    var m = flat.match(/\d{17}[\dXx]/);
+    if (!m) {
+      var m2 = fixDigits(flat).match(/\d{17}[\dX]/);
+      if (m2) m = m2;
+    }
+    if (!m) {
+      var m3 = flat.match(/\d{15}(?!\d)/);
+      if (m3) m = m3;
+    }
+    if (m) out.id = m[0].toUpperCase();
+
+    // 姓名：取“姓名”后面的汉字，遇到“性别”截止
+    var lines = text.split(/\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].replace(/\s+/g, "");
+      var k = line.indexOf("姓名");
+      if (k >= 0) {
+        var rest = line.slice(k + 2).split("性别")[0].split("民族")[0];
+        var han = rest.match(/[\u4e00-\u9fa5·]+/g);
+        if (han) { out.name = han.join("").slice(0, 8); break; }
+      }
+    }
+    return out;
+  }
+
+  $("photo").addEventListener("change", function(e){
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    bar.style.display = "block"; fill.style.width = "0";
+    setMsg("正在处理图片…");
+    var prep;
+    prepare(file).then(function(r){
+      prep = r;
+      var pv = $("preview"); pv.src = r.url; pv.style.display = "block";
+      return getWorker();
+    }).then(function(w){
+      return w.recognize(prep.canvas);
+    }).then(function(res){
+      var r = parse(res.data.text || "");
+      if (r.name) $("name").value = r.name;
+      if (r.id) { input.value = r.id; run(); }
+      if (r.id && r.name) setMsg("识别完成，请对照照片核对姓名和号码。");
+      else if (r.id) setMsg("识别到号码，但没识别到姓名，请手动填写，并核对号码。");
+      else setMsg("没有识别到号码。请确保拍的是人像面，光线均匀、不反光、证件尽量占满画面。", true);
+    }).catch(function(err){
+      setMsg(err.message || "识别失败，请重试", true);
+    }).then(function(){
+      bar.style.display = "none";
+    });
+  });
+})();
+</script>
+</body>
+</html>
