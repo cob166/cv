@@ -116,6 +116,8 @@
   .irow-g label{display:block; font-size:13px; color:var(--sub)}
   .irow-g input{margin-top:4px; padding:10px 8px; font-size:16px; text-align:right; background:var(--card)}
   .irow input.bad{border-color:var(--bad)}
+  .irow input.auto{background:var(--okbg)}
+  .calc-tip{font-size:13px; color:var(--sub); line-height:1.6; margin:-2px 0 10px}
   #sheet{display:block; width:100%; height:auto; border:1px solid var(--line); border-radius:6px; background:#fff}
 
   /* 资料查询 */
@@ -192,6 +194,7 @@
         </div>
         <div class="card">
           <div class="card-h"><h3>物品明细</h3><span id="sumTxt" class="sumtxt"></span></div>
+          <div class="calc-tip">单价、数量、总额，填任意两项，第三项自动计算（浅绿色的是自动算出的）。</div>
           <div id="itemsBox"></div>
           <button id="addRow" class="btn ghost sm" type="button">＋ 添加一行</button>
         </div>
@@ -480,7 +483,7 @@
       '<div class="irow-g">' +
         '<label>单价<input data-k="price" inputmode="decimal" placeholder="0"></label>' +
         '<label>数量<input data-k="qty" inputmode="decimal" placeholder="0"></label>' +
-        '<label>总额<input data-k="amount" inputmode="decimal" placeholder="自动计算"></label>' +
+        '<label>总额<input data-k="amount" inputmode="decimal" placeholder="0"></label>' +
       '</div>';
     itemsBox.appendChild(d); renumber();
   }
@@ -492,30 +495,51 @@
     var b = e.target.closest(".del"); if (!b) return;
     var row = b.closest(".irow");
     if (rows().length > 1) row.remove();
-    else Array.prototype.forEach.call(row.querySelectorAll("input"), function(i){ i.value = ""; i.classList.remove("bad"); });
+    else { Array.prototype.forEach.call(row.querySelectorAll("input"), function(i){ i.value = ""; i.classList.remove("bad"); }); resetCalcState(row); }
     renumber(); updateSum(); downloaded = false; scheduleDraw();
   });
-        itemsBox.addEventListener("input", function(e){
-    var t = e.target, k = t.getAttribute("data-k"); if (!k) return;
-    t.classList.remove("bad");
-    var row = t.closest(".irow");
-    var pEl = row.querySelector('[data-k="price"]');
-    var qEl = row.querySelector('[data-k="qty"]');
-    var aEl = row.querySelector('[data-k="amount"]');
-    var p = pEl.value.trim(), q = qEl.value.trim(), a = aEl.value.trim();
-    var pn = Number(p), qn = Number(q), an = Number(a);
-    // 固定规则（不再互相抢）：
-    // 1) 改单价或数量 → 总额 = 单价 × 数量
-    // 2) 改总额 → 单价 = 总额 ÷ 数量
-    if (k === "price" || k === "qty") {
-      if (p !== "" && q !== "" && isFinite(pn) && isFinite(qn)) {
-        aEl.value = (Math.round(pn * qn * 100) / 100).toFixed(2);
-      }
-    } else if (k === "amount") {
-      if (a !== "" && q !== "" && isFinite(an) && isFinite(qn) && qn !== 0) {
-        pEl.value = String(Math.round(an / qn * 10000) / 10000);
+  // 单价 / 数量 / 总额：填任意两项，第三项自动算（浅绿色的是自动算出的）
+  var FIELDS = ["price", "qty", "amount"];
+  function fld(row, k){ return row.querySelector('[data-k="' + k + '"]'); }
+  function trimNum(x, d){ return String(Number(x.toFixed(d))); }
+  function markAuto(row, auto){
+    row.dataset.auto = auto || "";
+    FIELDS.forEach(function(k){ fld(row, k).classList.toggle("auto", k === auto); });
+  }
+  function resetCalcState(row){ markAuto(row, ""); }
+  function calcRow(row, k){
+    var auto = row.dataset.auto || "";
+    var v = rv(row, k);
+    if (auto === k) auto = "";                 // 改了自动算出的那一格，它就变成手填
+    if (v === "") {                            // 清空这一格：由它算出来的自动格一起清掉，不再计算
+      if (auto) { fld(row, auto).value = ""; auto = ""; }
+      markAuto(row, auto); return;
+    }
+    if (!NUM.test(v)) { markAuto(row, auto); return; }   // 还没写完整（如 12.），先不算
+    var others = FIELDS.filter(function(x){ return x !== k; });
+    var filled = others.filter(function(x){ return NUM.test(rv(row, x)); });
+    var tgt = "";
+    if (auto) tgt = auto;                      // 已有自动格：改动手填的任一格，重算这个自动格
+    else if (filled.length === 2) tgt = (k === "amount") ? "price" : "amount";   // 三项都有：改总额→算单价，改单价/数量→算总额
+    else if (filled.length === 1) tgt = others.filter(function(x){ return filled.indexOf(x) < 0; })[0];   // 只有两项：算空着的第三项
+    if (tgt) {
+      var man = FIELDS.filter(function(x){ return x !== tgt; });       // 用另外两项来算
+      var p = rv(row, "price"), q = rv(row, "qty"), a = rv(row, "amount");
+      var val = {price: p, qty: q, amount: a};
+      if (NUM.test(val[man[0]]) && NUM.test(val[man[1]])) {
+        var res = "";
+        if (tgt === "amount") res = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
+        else if (tgt === "price" && Number(q) > 0) res = trimNum(Number(a) / Number(q), 4);
+        else if (tgt === "qty" && Number(p) > 0) res = trimNum(Number(a) / Number(p), 4);
+        fld(row, tgt).value = res; auto = res ? tgt : "";
       }
     }
+    markAuto(row, auto);
+  }
+  itemsBox.addEventListener("input", function(e){
+    var t = e.target, k = t.getAttribute("data-k"); if (!k) return;
+    t.classList.remove("bad");
+    if (FIELDS.indexOf(k) >= 0) calcRow(t.closest(".irow"), k);
     updateSum(); downloaded = false; scheduleDraw();
   });
 
@@ -543,7 +567,6 @@
       var pr = Number(price), qt = Number(qty);
       if ((!amount || amount === "") && price !== "" && qty !== "" && isFinite(pr) && isFinite(qt)) {
         amount = (Math.round(pr * qt * 100) / 100).toFixed(2);
-        r.querySelector('[data-k="amount"]').value = amount;
       }
       s += Number(amount) || 0;
     });
