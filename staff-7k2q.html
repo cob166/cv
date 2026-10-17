@@ -106,7 +106,7 @@
   .cap:first-child{margin-top:0}
   img.photo{display:block; width:100%; max-height:340px; object-fit:contain; border-radius:10px; border:1px solid var(--line); background:#fff}
   img.sig{display:block; width:100%; background:#fff; border:1px solid var(--line); border-radius:10px}
-  .sumtxt{font-size:15px; font-weight:700; color:var(--ok)}
+  .sumtxt{font-size:17px; font-weight:800; color:var(--ok); white-space:nowrap}
   .irow{background:var(--soft); border-radius:12px; padding:12px; margin-bottom:10px}
   .irow-h{display:flex; align-items:center; gap:10px; margin-bottom:10px}
   .idx{flex:0 0 24px; height:24px; border-radius:50%; background:var(--ink); color:var(--bg); font-size:13px; display:flex; align-items:center; justify-content:center}
@@ -186,7 +186,7 @@
           <div class="card-h"><h3>顾客资料</h3><button id="editBtn" class="chip" type="button">修改</button></div>
           <div id="custBox"></div>
         </div>
-        <div class="card">
+        <div class="card" id="mediaCard" hidden style="display:none!important">
           <h3>顾客提交的照片和签名</h3>
           <div id="mediaBox"></div>
         </div>
@@ -527,8 +527,15 @@
   }
   function updateSum(){
     var s = 0;
-    lenientItems().forEach(function(it){ s += Number(it.amount) || 0; });
-    $("sumTxt").textContent = s ? "总计 ¥" + money(s) : "";
+    rows().forEach(function(r){
+      var price = rv(r, "price"), qty = rv(r, "qty"), amount = rv(r, "amount");
+      if (!amount && NUM.test(price) && NUM.test(qty)) {
+        amount = calcAmount(price, qty);
+        r.querySelector('[data-k="amount"]').value = amount;
+      }
+      s += Number(amount) || 0;
+    });
+    $("sumTxt").textContent = s > 0 ? "总计 ¥" + money(s) : "";
   }
   function collectItems(){
     var out = [], err = "", names = {price:"单价", qty:"数量", amount:"总额"};
@@ -594,7 +601,24 @@
       var lines = wrapText(g, v || "", CW - 200);
       lines.forEach(function(l, i){ if (i) y += 38; g.fillText(l, M + 200, y); });
     }
+    var photoAreaTop = y + 20;
     kv("姓名", cur.name); kv("身份证号码", cur.idno); kv("手机号码", cur.mobile); kv("居住地址", cur.address);
+
+    // 物品照片固定在顾客资料右侧（不挡住下面的明细和总计）
+    if (photoImg) {
+      var phMaxW = 260, phMaxH = 200;
+      var psc = Math.min(phMaxW / photoImg.naturalWidth, phMaxH / photoImg.naturalHeight, 1);
+      var pw2 = photoImg.naturalWidth * psc, ph = photoImg.naturalHeight * psc;
+      var px = SW - M - pw2;
+      var py = photoAreaTop;
+      g.strokeStyle = line; g.lineWidth = 1.5; g.strokeRect(px - 6, py - 6, pw2 + 12, ph + 12);
+      g.drawImage(photoImg, px, py, pw2, ph);
+      g.fillStyle = sub; g.font = "20px " + F; g.textAlign = "center";
+      g.fillText("物品照片", px + pw2 / 2, py - 12);
+      g.textAlign = "left";
+      // 若照片比文字高，把 y 往下推一点，避免和明细重叠
+      if (py + ph + 20 > y) y = py + ph + 20;
+    }
 
     // 物品明细
     section("物品明细");
@@ -607,17 +631,28 @@
     y += 54;
     var items = lenientItems(), list = items.length ? items : [{}, {}, {}], total = 0;
     list.forEach(function(it, idx){
+      var amt = String(it.amount || "").trim();
+      var pr = String(it.price || "").trim();
+      var qt = String(it.qty || "").trim();
+      // 强制用单价×数量算出总额（只要两边都是数字）
+      if (pr && qt && !isNaN(Number(pr)) && !isNaN(Number(qt))) {
+        amt = (Math.round(Number(pr) * Number(qt) * 100) / 100).toFixed(2);
+      }
       g.strokeStyle = line; g.lineWidth = 1.5; g.beginPath(); g.moveTo(M, y + 54); g.lineTo(SW - M, y + 54); g.stroke();
       g.fillStyle = ink; g.font = "25px " + F;
-      g.textAlign = "left"; if (it.name || it.price || it.qty || it.amount) g.fillText(String(idx + 1), cx[0] + 14, y + 36);
+      g.textAlign = "left"; if (it.name || pr || qt || amt) g.fillText(String(idx + 1), cx[0] + 14, y + 36);
       g.fillText(it.name || "", cx[1] + 14, y + 36, cw[1] - 28);
       g.textAlign = "right";
-      g.fillText(it.price || "", cx[3] - 16, y + 36, cw[2] - 24); g.fillText(it.qty || "", cx[4] - 16, y + 36, cw[3] - 24); g.fillText(it.amount || "", cx[5] - 16, y + 36, cw[4] - 24);
-      total += Number(it.amount) || 0; y += 54;
+      g.fillText(pr || "", cx[3] - 16, y + 36, cw[2] - 24);
+      g.fillText(qt || "", cx[4] - 16, y + 36, cw[3] - 24);
+      g.fillText(amt || "", cx[5] - 16, y + 36, cw[4] - 24);
+      total += Number(amt) || 0; y += 54;
     });
     g.fillStyle = "#f6f5ef"; g.fillRect(M, y, CW, 56);
-    g.fillStyle = ink; g.font = "700 26px " + F; g.textAlign = "left"; g.fillText("总计", cx[0] + 14, y + 38);
-    g.textAlign = "right"; g.fillText(total ? "¥ " + money(total) : "", cx[5] - 16, y + 38);
+    g.fillStyle = ink; g.font = "700 28px " + F; g.textAlign = "left"; g.fillText("总计", cx[0] + 14, y + 38);
+    g.textAlign = "right";
+    g.fillStyle = accent; g.font = "700 28px " + F;
+    g.fillText("¥ " + money(total), cx[5] - 16, y + 38);
     g.strokeStyle = line; g.lineWidth = 1.5; g.strokeRect(M, y - (list.length + 1) * 54, CW, (list.length + 1) * 54 + 56);
     y += 56; g.textAlign = "left";
 
@@ -625,16 +660,6 @@
     y += 48;
     g.fillStyle = sub; g.font = "26px " + F; g.fillText("收款方式：", M, y);
     g.fillStyle = ink; g.font = "600 28px " + F; g.fillText(pay || "—", M + 160, y);
-
-    if (photoImg) {
-      var phMaxW = 280, phMaxH = 220;
-      var psc = Math.min(phMaxW / photoImg.naturalWidth, phMaxH / photoImg.naturalHeight, 1);
-      var pw2 = photoImg.naturalWidth * psc, ph = photoImg.naturalHeight * psc;
-      var px = SW - M - pw2, py = y - 30;
-      g.strokeStyle = line; g.lineWidth = 1.5; g.strokeRect(px - 6, py - 6, pw2 + 12, ph + 12);
-      g.drawImage(photoImg, px, py, pw2, ph);
-      g.fillStyle = sub; g.font = "20px " + F; g.fillText("物品照片", px, py - 12);
-    }
 
     y += 70; g.textAlign = "center"; g.fillStyle = red; g.font = "800 38px " + F;
     try { g.letterSpacing = "10px"; } catch (e) {}
