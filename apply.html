@@ -36,6 +36,12 @@
     border:1px solid var(--line); background:transparent; color:var(--ink);
   }
   #idno{font-family:ui-monospace,Menlo,Consolas,monospace; letter-spacing:.06em}
+  .seg{display:flex; gap:10px; margin-bottom:18px}
+  .seg label{flex:1; position:relative; display:block}
+  .seg input{position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer}
+  .seg span{display:block; text-align:center; font-size:18px; padding:13px 14px; border-radius:10px; border:1px solid var(--line)}
+  .seg input:checked+span{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+  .seg input:focus-visible+span{outline:2px solid var(--ok); outline-offset:2px}
   input:focus-visible,button:focus-visible{outline:2px solid var(--ok); outline-offset:2px}
   button{
     width:100%; font-size:17px; padding:14px; border-radius:10px; cursor:pointer;
@@ -74,6 +80,12 @@
   <div class="box" id="formbox">
     <label class="f" for="name">姓名</label>
     <input id="name" type="text" autocomplete="name" maxlength="20" placeholder="与身份证一致">
+
+    <label class="f">性别</label>
+    <div class="seg" role="radiogroup" aria-label="性别">
+      <label><input type="radio" name="gender" value="男"><span>男</span></label>
+      <label><input type="radio" name="gender" value="女"><span>女</span></label>
+    </div>
 
     <label class="f" for="idno">身份证号码</label>
     <input id="idno" type="text" inputmode="text" autocomplete="off" autocapitalize="characters"
@@ -274,6 +286,8 @@
     var name = $("name").value.trim();
     var idno = $("idno").value.trim().toUpperCase();
     if (!name) { show("请填写姓名。", "err"); return; }
+    var gEl = document.querySelector('input[name="gender"]:checked'), gender = gEl ? gEl.value : "";
+    if (!gender) { show("请选择性别。", "err"); return; }
     var p = idProblem(idno);
     if (p) { show(p, "err"); return; }
     var mobile = $("mobile").value.trim(), address = $("address").value.trim();
@@ -291,12 +305,12 @@
     fetch(API_BASE.replace(/\/+$/, "") + "/submit", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({name:name, idno:idno, mobile:mobile, address:address, submittedAt:$("stamp").textContent, photo:photoData, signature:sign.toDataURL("image/png"), readit:true})
+      body: JSON.stringify({name:name, gender:gender, idno:idno, mobile:mobile, address:address, submittedAt:$("stamp").textContent, photo:photoData, signature:sign.toDataURL("image/png"), readit:true})
     }).then(function(res){
       return res.json().catch(function(){ return {}; }).then(function(j){
         if (res.ok && j.ok) {
           show("已提交。请告知店员，由店员核对后确认。", "ok", 10000);
-          $("name").value = ""; $("idno").value = ""; $("mobile").value = ""; $("address").value = "";
+          $("name").value = ""; if (gEl) gEl.checked = false; $("idno").value = ""; $("mobile").value = ""; $("address").value = "";
           photoData = ""; $("preview").style.display = "none";
           agree.checked = false; readit.checked = false;
           clearSign();
