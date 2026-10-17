@@ -637,7 +637,7 @@
       lines.forEach(function(l, i){ if (i) y += 38; g.fillText(l, M + 200, y); });
     }
     var photoAreaTop = y + 20;
-    kv("姓名：", cur.name); kv("身份证号码：", cur.idno); kv("手机号码：", cur.mobile); kv("居住地址：", cur.address);
+    kv("姓名", cur.name); kv("身份证号码", cur.idno); kv("手机号码", cur.mobile); kv("居住地址", cur.address);
 
     // 物品照片固定在顾客资料右侧（不挡住下面的明细和总计）
     if (photoImg) {
