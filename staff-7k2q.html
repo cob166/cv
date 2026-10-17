@@ -623,37 +623,55 @@
     // 物品明细
     section("物品明细");
     y += 14;
-    var cw = [70, 470, 190, 170, 180], cx = [M]; for (var i = 0; i < 4; i++) cx.push(cx[i] + cw[i]);
+    // 列宽：序号70 品种360 单价180 数量150 总额220（总额加宽，避免金额被裁掉）
+    var cw = [70, 360, 180, 150, 220], cx = [M];
+    for (var i = 0; i < 4; i++) cx.push(cx[i] + cw[i]);
     g.fillStyle = "#eef1ed"; g.fillRect(M, y, CW, 54);
     g.fillStyle = sub; g.font = "600 24px " + F;
-    g.textAlign = "left"; g.fillText("序号", cx[0] + 14, y + 36); g.fillText("品种", cx[1] + 14, y + 36);
-    g.textAlign = "right"; g.fillText("单价", cx[3] - 16, y + 36); g.fillText("数量", cx[4] - 16, y + 36); g.fillText("总额", cx[5] - 16, y + 36);
+    g.textAlign = "left";
+    g.fillText("序号", cx[0] + 14, y + 36);
+    g.fillText("品种", cx[1] + 14, y + 36);
+    g.textAlign = "right";
+    g.fillText("单价", cx[2] + cw[2] - 14, y + 36);
+    g.fillText("数量", cx[3] + cw[3] - 14, y + 36);
+    g.fillText("总额", cx[4] + cw[4] - 14, y + 36);
     y += 54;
-    var items = lenientItems(), list = items.length ? items : [{}, {}, {}], total = 0;
-    list.forEach(function(it, idx){
-      var amt = String(it.amount || "").trim();
-      var pr = String(it.price || "").trim();
-      var qt = String(it.qty || "").trim();
-      // 强制用单价×数量算出总额（只要两边都是数字）
-      if (pr && qt && !isNaN(Number(pr)) && !isNaN(Number(qt))) {
-        amt = (Math.round(Number(pr) * Number(qt) * 100) / 100).toFixed(2);
+
+    var rowEls = rows(), list = [], total = 0;
+    rowEls.forEach(function(r){
+      var name = rv(r, "name"), price = rv(r, "price"), qty = rv(r, "qty"), amount = rv(r, "amount");
+      if (!name && !price && !qty && !amount) return;
+      var pr = Number(price), qt = Number(qty);
+      if (price !== "" && qty !== "" && isFinite(pr) && isFinite(qt)) {
+        amount = (Math.round(pr * qt * 100) / 100).toFixed(2);
+        r.querySelector('[data-k="amount"]').value = amount;
       }
-      g.strokeStyle = line; g.lineWidth = 1.5; g.beginPath(); g.moveTo(M, y + 54); g.lineTo(SW - M, y + 54); g.stroke();
+      list.push({name: name, price: price, qty: qty, amount: amount});
+      total += Number(amount) || 0;
+    });
+    if (!list.length) list = [{}, {}, {}];
+
+    list.forEach(function(it, idx){
+      g.strokeStyle = line; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(M, y + 54); g.lineTo(SW - M, y + 54); g.stroke();
       g.fillStyle = ink; g.font = "25px " + F;
-      g.textAlign = "left"; if (it.name || pr || qt || amt) g.fillText(String(idx + 1), cx[0] + 14, y + 36);
+      g.textAlign = "left";
+      if (it.name || it.price || it.qty || it.amount) g.fillText(String(idx + 1), cx[0] + 14, y + 36);
       g.fillText(it.name || "", cx[1] + 14, y + 36, cw[1] - 28);
       g.textAlign = "right";
-      g.fillText(pr || "", cx[3] - 16, y + 36, cw[2] - 24);
-      g.fillText(qt || "", cx[4] - 16, y + 36, cw[3] - 24);
-      g.fillText(amt || "", cx[5] - 16, y + 36, cw[4] - 24);
-      total += Number(amt) || 0; y += 54;
+      g.fillText(it.price || "", cx[2] + cw[2] - 14, y + 36);
+      g.fillText(it.qty || "", cx[3] + cw[3] - 14, y + 36);
+      g.fillText(it.amount || "", cx[4] + cw[4] - 14, y + 36);
+      y += 54;
     });
+
     g.fillStyle = "#f6f5ef"; g.fillRect(M, y, CW, 56);
-    g.fillStyle = ink; g.font = "700 28px " + F; g.textAlign = "left"; g.fillText("总计", cx[0] + 14, y + 38);
-    g.textAlign = "right";
-    g.fillStyle = accent; g.font = "700 28px " + F;
-    g.fillText("¥ " + money(total), cx[5] - 16, y + 38);
-    g.strokeStyle = line; g.lineWidth = 1.5; g.strokeRect(M, y - (list.length + 1) * 54, CW, (list.length + 1) * 54 + 56);
+    g.fillStyle = ink; g.font = "700 28px " + F; g.textAlign = "left";
+    g.fillText("总计", cx[0] + 14, y + 38);
+    g.textAlign = "right"; g.fillStyle = accent; g.font = "700 28px " + F;
+    g.fillText("¥ " + money(total), cx[4] + cw[4] - 14, y + 38);
+    g.strokeStyle = line; g.lineWidth = 1.5;
+    g.strokeRect(M, y - (list.length + 1) * 54, CW, (list.length + 1) * 54 + 56);
     y += 56; g.textAlign = "left";
 
     var pay = ($("payMethod") && $("payMethod").value.trim()) || "";
