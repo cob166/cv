@@ -431,10 +431,10 @@
     var b = $("custBox");
     if (!editing) {
       b.innerHTML = '<dl class="kv">' +
-        '<dt>姓名</dt><dd>' + esc(cur.name) + '</dd>' +
-        '<dt>身份证</dt><dd class="mono">' + esc(cur.idno) + '</dd>' +
-        '<dt>手机号码</dt><dd>' + esc(cur.mobile) + '</dd>' +
-        '<dt>居住地址</dt><dd>' + esc(cur.address) + '</dd>' +
+        '<dt>姓名：</dt><dd>' + esc(cur.name) + '</dd>' +
+        '<dt>身份证：</dt><dd class="mono">' + esc(cur.idno) + '</dd>' +
+        '<dt>手机号码：</dt><dd>' + esc(cur.mobile) + '</dd>' +
+        '<dt>居住地址：</dt><dd>' + esc(cur.address) + '</dd>' +
         '<dt>提交时间</dt><dd>' + esc(cur.submittedAt || fmtFull(cur.time)) + '</dd></dl>';
     } else {
       b.innerHTML = '<div class="ef">' +
