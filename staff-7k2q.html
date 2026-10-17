@@ -897,9 +897,9 @@
   $("dlCsv").addEventListener("click", function(){
     var btn = this; btn.disabled = true; var old = btn.textContent; btn.textContent = "准备中…";
     api("/records", queryBody({detail: true, limit: 500})).then(function(j){
-      var out = [["存档时间","登记时间","姓名","身份证号码","手机号码","居住地址","收款方式","品种","单价","数量","总额"].join(",")];
+      var out = [["存档时间","登记时间","姓名","性别","身份证号码","手机号码","居住地址","收款方式","品种","单价","数量","总额"].join(",")];
       (j.items || []).forEach(function(r){
-        var head = [csvCell(fmtFull(r.confirmedAt)), csvCell(r.submittedAt || ""), csvCell(r.name), textCell(r.idno), textCell(r.mobile), csvCell(r.address), csvCell(r.payMethod || "")];
+        var head = [csvCell(fmtFull(r.confirmedAt)), csvCell(r.submittedAt || ""), csvCell(r.name), csvCell(r.gender || ""), textCell(r.idno), textCell(r.mobile), csvCell(r.address), csvCell(r.payMethod || "")];
         var its = (r.items && r.items.length) ? r.items : [{}];
         its.forEach(function(x){ out.push(head.concat([csvCell(x.name), csvCell(x.price), csvCell(x.qty), csvCell(x.amount)]).join(",")); });
       });
