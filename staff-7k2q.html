@@ -495,15 +495,36 @@
     else Array.prototype.forEach.call(row.querySelectorAll("input"), function(i){ i.value = ""; i.classList.remove("bad"); });
     renumber(); updateSum(); downloaded = false; scheduleDraw();
   });
-  itemsBox.addEventListener("input", function(e){
+    itemsBox.addEventListener("input", function(e){
     var t = e.target, k = t.getAttribute("data-k"); if (!k) return;
     t.classList.remove("bad");
     var row = t.closest(".irow");
-    var p = rv(row, "price"), q = rv(row, "qty"), a = rv(row, "amount");
-    if ((k === "price" || k === "qty") && NUM.test(p) && NUM.test(q)) {
-      row.querySelector('[data-k="amount"]').value = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
-    } else if ((k === "amount" || k === "qty") && NUM.test(a) && NUM.test(q) && Number(q) !== 0) {
-      row.querySelector('[data-k="price"]').value = (Math.round(Number(a) / Number(q) * 10000) / 10000).toFixed(4).replace(/\.?0+$/, "") || "0";
+    var pEl = row.querySelector('[data-k="price"]');
+    var qEl = row.querySelector('[data-k="qty"]');
+    var aEl = row.querySelector('[data-k="amount"]');
+    var p = pEl.value.trim(), q = qEl.value.trim(), a = aEl.value.trim();
+    // 规则：
+    // 改单价 → 用 单价×数量 算总额
+    // 改总额 → 用 总额÷数量 算单价
+    // 改数量 → 优先保留总额（有总额则反算单价）；否则有单价则算总额
+    if (k === "price") {
+      if (NUM.test(p) && NUM.test(q)) {
+        aEl.value = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
+      }
+    } else if (k === "amount") {
+      if (NUM.test(a) && NUM.test(q) && Number(q) !== 0) {
+        var pr = Math.round(Number(a) / Number(q) * 10000) / 10000;
+        pEl.value = String(pr);
+      }
+    } else if (k === "qty") {
+      if (NUM.test(a) && NUM.test(q) && Number(q) !== 0) {
+        // 已有总额：改数量时保留总额，反算单价
+        var pr2 = Math.round(Number(a) / Number(q) * 10000) / 10000;
+        pEl.value = String(pr2);
+      } else if (NUM.test(p) && NUM.test(q)) {
+        // 没有总额、有单价：用单价×数量算总额
+        aEl.value = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
+      }
     }
     updateSum(); downloaded = false; scheduleDraw();
   });
