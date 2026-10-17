@@ -24,7 +24,6 @@
   [hidden]{display:none !important}
   button,input{font:inherit; color:inherit}
   input{width:100%; min-width:0; padding:12px; font-size:17px; border:1px solid var(--line); border-radius:10px; background:transparent}
-  .ef select{font:inherit; color:inherit; width:100%; padding:12px; font-size:17px; border:1px solid var(--line); border-radius:10px; background:transparent}
   input:focus-visible,button:focus-visible{outline:2px solid var(--ok); outline-offset:1px}
   h2{font-size:20px; margin:0}
   h3{font-size:16px; margin:0 0 10px}
@@ -433,7 +432,6 @@
     if (!editing) {
       b.innerHTML = '<dl class="kv">' +
         '<dt>姓名：</dt><dd>' + esc(cur.name) + '</dd>' +
-        '<dt>性别：</dt><dd>' + esc(cur.gender) + '</dd>' +
         '<dt>身份证：</dt><dd class="mono">' + esc(cur.idno) + '</dd>' +
         '<dt>手机号码：</dt><dd>' + esc(cur.mobile) + '</dd>' +
         '<dt>居住地址：</dt><dd>' + esc(cur.address) + '</dd>' +
@@ -441,7 +439,6 @@
     } else {
       b.innerHTML = '<div class="ef">' +
         '<label for="eName">姓名</label><input id="eName" maxlength="20" value="' + esc(cur.name) + '">' +
-        '<label for="eGender">性别</label><select id="eGender"><option value="">未填</option><option value="男"' + (cur.gender === "男" ? " selected" : "") + '>男</option><option value="女"' + (cur.gender === "女" ? " selected" : "") + '>女</option></select>' +
         '<label for="eId">身份证号码</label><input id="eId" maxlength="18" autocapitalize="characters" value="' + esc(cur.idno) + '">' +
         '<label for="eMobile">手机号码</label><input id="eMobile" inputmode="tel" maxlength="11" value="' + esc(cur.mobile) + '">' +
         '<label for="eAddr">居住地址</label><input id="eAddr" maxlength="120" value="' + esc(cur.address) + '"></div>';
@@ -455,7 +452,7 @@
     if (!idOk(idno)) { toast("身份证号码不正确，请对照证件检查。", "err"); return; }
     if (!/^1[3-9]\d{9}$/.test(mobile)) { toast("手机号码应为 11 位。", "err"); return; }
     if (!addr || addr.length > 120) { toast("请填写居住地址（不超过 120 字）。", "err"); return; }
-    cur.name = name; cur.gender = $("eGender").value; cur.idno = idno; cur.mobile = mobile; cur.address = addr;
+    cur.name = name; cur.idno = idno; cur.mobile = mobile; cur.address = addr;
     editing = false; this.textContent = "修改"; downloaded = false;
     renderCustomer(); drawSheet();
   });
@@ -640,7 +637,7 @@
       lines.forEach(function(l, i){ if (i) y += 38; g.fillText(l, M + 200, y); });
     }
     var photoAreaTop = y + 20;
-    kv("姓名：", cur.name); kv("性别：", cur.gender); kv("身份证号码：", cur.idno); kv("手机号码：", cur.mobile); kv("居住地址：", cur.address);
+    kv("姓名：", cur.name); kv("身份证号码：", cur.idno); kv("手机号码：", cur.mobile); kv("居住地址：", cur.address);
 
     // 物品照片固定在顾客资料右侧（不挡住下面的明细和总计）
     if (photoImg) {
@@ -798,7 +795,7 @@
     if (!confirm(msg)) return;
     var btn = $("btnConfirm"), id = curId; btn.disabled = true;
     api("/confirm?id=" + encodeURIComponent(id), {
-      name: cur.name, gender: cur.gender || "", idno: cur.idno, mobile: cur.mobile, address: cur.address,
+      name: cur.name, idno: cur.idno, mobile: cur.mobile, address: cur.address,
       items: r.items, payMethod: ($("payMethod") && $("payMethod").value || "").trim().slice(0, 40)
     }).then(function(){
       toast("已确认存档。"); rec.loaded = false; rec.detail = {};
