@@ -495,7 +495,7 @@
     else Array.prototype.forEach.call(row.querySelectorAll("input"), function(i){ i.value = ""; i.classList.remove("bad"); });
     renumber(); updateSum(); downloaded = false; scheduleDraw();
   });
-    itemsBox.addEventListener("input", function(e){
+        itemsBox.addEventListener("input", function(e){
     var t = e.target, k = t.getAttribute("data-k"); if (!k) return;
     t.classList.remove("bad");
     var row = t.closest(".irow");
@@ -503,27 +503,17 @@
     var qEl = row.querySelector('[data-k="qty"]');
     var aEl = row.querySelector('[data-k="amount"]');
     var p = pEl.value.trim(), q = qEl.value.trim(), a = aEl.value.trim();
-    // 规则：
-    // 改单价 → 用 单价×数量 算总额
-    // 改总额 → 用 总额÷数量 算单价
-    // 改数量 → 优先保留总额（有总额则反算单价）；否则有单价则算总额
-    if (k === "price") {
-      if (NUM.test(p) && NUM.test(q)) {
-        aEl.value = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
+    var pn = Number(p), qn = Number(q), an = Number(a);
+    // 固定规则（不再互相抢）：
+    // 1) 改单价或数量 → 总额 = 单价 × 数量
+    // 2) 改总额 → 单价 = 总额 ÷ 数量
+    if (k === "price" || k === "qty") {
+      if (p !== "" && q !== "" && isFinite(pn) && isFinite(qn)) {
+        aEl.value = (Math.round(pn * qn * 100) / 100).toFixed(2);
       }
     } else if (k === "amount") {
-      if (NUM.test(a) && NUM.test(q) && Number(q) !== 0) {
-        var pr = Math.round(Number(a) / Number(q) * 10000) / 10000;
-        pEl.value = String(pr);
-      }
-    } else if (k === "qty") {
-      if (NUM.test(a) && NUM.test(q) && Number(q) !== 0) {
-        // 已有总额：改数量时保留总额，反算单价
-        var pr2 = Math.round(Number(a) / Number(q) * 10000) / 10000;
-        pEl.value = String(pr2);
-      } else if (NUM.test(p) && NUM.test(q)) {
-        // 没有总额、有单价：用单价×数量算总额
-        aEl.value = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
+      if (a !== "" && q !== "" && isFinite(an) && isFinite(qn) && qn !== 0) {
+        pEl.value = String(Math.round(an / qn * 10000) / 10000);
       }
     }
     updateSum(); downloaded = false; scheduleDraw();
@@ -550,8 +540,9 @@
     var s = 0;
     rows().forEach(function(r){
       var price = rv(r, "price"), qty = rv(r, "qty"), amount = rv(r, "amount");
-      if (!amount && NUM.test(price) && NUM.test(qty)) {
-        amount = calcAmount(price, qty);
+      var pr = Number(price), qt = Number(qty);
+      if ((!amount || amount === "") && price !== "" && qty !== "" && isFinite(pr) && isFinite(qt)) {
+        amount = (Math.round(pr * qt * 100) / 100).toFixed(2);
         r.querySelector('[data-k="amount"]').value = amount;
       }
       s += Number(amount) || 0;
@@ -663,9 +654,14 @@
       var name = rv(r, "name"), price = rv(r, "price"), qty = rv(r, "qty"), amount = rv(r, "amount");
       if (!name && !price && !qty && !amount) return;
       var pr = Number(price), qt = Number(qty);
-      if (price !== "" && qty !== "" && isFinite(pr) && isFinite(qt)) {
+      // 只在总额为空时才自动填，避免覆盖用户输入的总额
+      if ((!amount || amount === "") && price !== "" && qty !== "" && isFinite(pr) && isFinite(qt)) {
         amount = (Math.round(pr * qt * 100) / 100).toFixed(2);
         r.querySelector('[data-k="amount"]').value = amount;
+      } else if (amount !== "" && isFinite(Number(amount))) {
+        amount = Number(amount).toFixed(2);
+      } else if (price !== "" && qty !== "" && isFinite(pr) && isFinite(qt)) {
+        amount = (Math.round(pr * qt * 100) / 100).toFixed(2);
       }
       list.push({name: name, price: price, qty: qty, amount: amount});
       total += Number(amount) || 0;
