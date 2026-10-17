@@ -196,6 +196,10 @@
           <button id="addRow" class="btn ghost sm" type="button">＋ 添加一行</button>
         </div>
         <div class="card">
+          <h3>收款方式</h3>
+          <input id="payMethod" type="text" maxlength="40" placeholder="如：微信 / 支付宝 / 现金 / 银行转账" autocomplete="off" style="margin-top:4px">
+        </div>
+        <div class="card">
           <h3>登记单（A4）</h3>
           <canvas id="sheet" width="1240" height="1754"></canvas>
           <div class="two">
@@ -254,7 +258,7 @@
 
   var $ = function(id){ return document.getElementById(id); };
   var pw = "", pollTimer = null, pendList = [];
-  var curId = null, cur = null, sigImg = null, downloaded = false, editing = false, drawTimer = null;
+  var curId = null, cur = null, sigImg = null, photoImg = null, downloaded = false, editing = false, drawTimer = null;
   var rec = {seq:0, items:[], total:0, sum:"0", timer:null, loaded:false, detail:{}};
 
   function esc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
@@ -380,8 +384,9 @@
     window.scrollTo(0, 0);
   }
   function closeReview(){
-    curId = null; cur = null; sigImg = null; editing = false; clearTimeout(drawTimer);
+    curId = null; cur = null; sigImg = null; photoImg = null; editing = false; clearTimeout(drawTimer);
     $("itemsBox").innerHTML = ""; $("mediaBox").innerHTML = ""; $("custBox").innerHTML = "";
+    if ($("payMethod")) $("payMethod").value = "";
     setReviewing(false);
   }
   $("backBtn").addEventListener("click", function(){ closeReview(); loadPending(); });
@@ -390,15 +395,32 @@
     curId = id; cur = null; downloaded = false; editing = false;
     setReviewing(true);
     $("rvBody").hidden = true; $("rvLoading").hidden = false; $("rvLoading").textContent = "正在读取…";
+    if ($("payMethod")) $("payMethod").value = "";
     api("/pending/item?id=" + encodeURIComponent(id)).then(function(j){
       if (curId !== id) return;
       cur = j.item;
-      sigImg = null;
-      if (cur.signature) { var im = new Image(); im.onload = function(){ sigImg = im; scheduleDraw(); }; im.src = cur.signature; }
+      sigImg = null; photoImg = null;
+      var needDraw = 0;
+      function tryDraw(){ if (--needDraw <= 0) scheduleDraw(); }
+      if (cur.signature) {
+        needDraw++;
+        var im = new Image();
+        im.onload = function(){ sigImg = im; tryDraw(); };
+        im.onerror = tryDraw;
+        im.src = cur.signature;
+      }
+      if (cur.photo) {
+        needDraw++;
+        var pm = new Image();
+        pm.onload = function(){ photoImg = pm; tryDraw(); };
+        pm.onerror = tryDraw;
+        pm.src = cur.photo;
+      }
+      if (!needDraw) scheduleDraw();
       $("editBtn").textContent = "修改";
       renderCustomer(); renderMedia(); resetItems();
       $("rvLoading").hidden = true; $("rvBody").hidden = false;
-      drawSheet(); window.scrollTo(0, 0);
+      window.scrollTo(0, 0);
     }).catch(function(e){ $("rvLoading").textContent = errText(e) + "（点左上角返回）"; });
   }
 
@@ -477,35 +499,52 @@
     var t = e.target, k = t.getAttribute("data-k"); if (!k) return;
     t.classList.remove("bad");
     var row = t.closest(".irow");
-    if (k === "price" || k === "qty") {
-      var p = rv(row, "price"), q = rv(row, "qty");
-      if (NUM.test(p) && NUM.test(q)) row.querySelector('[data-k="amount"]').value = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
+    var p = rv(row, "price"), q = rv(row, "qty"), a = rv(row, "amount");
+    if ((k === "price" || k === "qty") && NUM.test(p) && NUM.test(q)) {
+      row.querySelector('[data-k="amount"]').value = (Math.round(Number(p) * Number(q) * 100) / 100).toFixed(2);
+    } else if ((k === "amount" || k === "qty") && NUM.test(a) && NUM.test(q) && Number(q) !== 0) {
+      row.querySelector('[data-k="price"]').value = (Math.round(Number(a) / Number(q) * 10000) / 10000).toFixed(4).replace(/\.?0+$/, "") || "0";
     }
     updateSum(); downloaded = false; scheduleDraw();
   });
 
-  // 宽松读取（用于预览和合计，不校验）
+  if ($("payMethod")) $("payMethod").addEventListener("input", function(){ downloaded = false; scheduleDraw(); });
+
+  function calcAmount(price, qty){
+    if (NUM.test(price) && NUM.test(qty)) {
+      return (Math.round(Number(price) * Number(qty) * 100) / 100).toFixed(2);
+    }
+    return "";
+  }
   function lenientItems(){
     var out = [];
     rows().forEach(function(r){
       var o = {name: rv(r, "name"), price: rv(r, "price"), qty: rv(r, "qty"), amount: rv(r, "amount")};
+      if (!o.amount) { var a = calcAmount(o.price, o.qty); if (a) o.amount = a; }
       if (o.name || o.price || o.qty || o.amount) out.push(o);
     });
     return out;
   }
   function updateSum(){
-    var s = 0; lenientItems().forEach(function(it){ s += Number(it.amount) || 0; });
-    $("sumTxt").textContent = s ? "合计 ¥" + money(s) : "";
+    var s = 0;
+    lenientItems().forEach(function(it){ s += Number(it.amount) || 0; });
+    $("sumTxt").textContent = s ? "总计 ¥" + money(s) : "";
   }
-  // 严格读取（用于存档）
   function collectItems(){
     var out = [], err = "", names = {price:"单价", qty:"数量", amount:"总额"};
     rows().forEach(function(r, i){
       var o = {name: rv(r, "name"), price: rv(r, "price"), qty: rv(r, "qty"), amount: rv(r, "amount")};
       if (!o.name && !o.price && !o.qty && !o.amount) return;
+      if (!o.amount) {
+        var a = calcAmount(o.price, o.qty);
+        if (a) { o.amount = a; r.querySelector('[data-k="amount"]').value = a; }
+      }
       if (!o.name) { err = err || "第 " + (i+1) + " 行请填写品种"; r.querySelector('[data-k="name"]').classList.add("bad"); }
       ["price","qty","amount"].forEach(function(k){
-        if (o[k] && !NUM.test(o[k])) { err = err || "第 " + (i+1) + " 行" + names[k] + "只能填数字（最多 4 位小数）"; r.querySelector('[data-k="' + k + '"]').classList.add("bad"); }
+        if (o[k] && !NUM.test(o[k])) {
+          err = err || "第 " + (i+1) + " 行" + names[k] + "只能填数字（最多 4 位小数）";
+          r.querySelector('[data-k="' + k + '"]').classList.add("bad");
+        }
       });
       out.push(o);
     });
@@ -577,20 +616,33 @@
       total += Number(it.amount) || 0; y += 54;
     });
     g.fillStyle = "#f6f5ef"; g.fillRect(M, y, CW, 56);
-    g.fillStyle = ink; g.font = "700 26px " + F; g.textAlign = "left"; g.fillText("合计", cx[0] + 14, y + 38);
+    g.fillStyle = ink; g.font = "700 26px " + F; g.textAlign = "left"; g.fillText("总计", cx[0] + 14, y + 38);
     g.textAlign = "right"; g.fillText(total ? "¥ " + money(total) : "", cx[5] - 16, y + 38);
     g.strokeStyle = line; g.lineWidth = 1.5; g.strokeRect(M, y - (list.length + 1) * 54, CW, (list.length + 1) * 54 + 56);
     y += 56; g.textAlign = "left";
 
-    // 承诺书
-    y += 78; g.textAlign = "center"; g.fillStyle = red; g.font = "800 38px " + F;
+    var pay = ($("payMethod") && $("payMethod").value.trim()) || "";
+    y += 48;
+    g.fillStyle = sub; g.font = "26px " + F; g.fillText("收款方式：", M, y);
+    g.fillStyle = ink; g.font = "600 28px " + F; g.fillText(pay || "—", M + 160, y);
+
+    if (photoImg) {
+      var phMaxW = 280, phMaxH = 220;
+      var psc = Math.min(phMaxW / photoImg.naturalWidth, phMaxH / photoImg.naturalHeight, 1);
+      var pw2 = photoImg.naturalWidth * psc, ph = photoImg.naturalHeight * psc;
+      var px = SW - M - pw2, py = y - 30;
+      g.strokeStyle = line; g.lineWidth = 1.5; g.strokeRect(px - 6, py - 6, pw2 + 12, ph + 12);
+      g.drawImage(photoImg, px, py, pw2, ph);
+      g.fillStyle = sub; g.font = "20px " + F; g.fillText("物品照片", px, py - 12);
+    }
+
+    y += 70; g.textAlign = "center"; g.fillStyle = red; g.font = "800 38px " + F;
     try { g.letterSpacing = "10px"; } catch (e) {}
     g.fillText("承诺书", SW / 2 + 5, y);
     try { g.letterSpacing = "0px"; } catch (e) {}
     g.textAlign = "left"; g.font = "27px " + F; g.fillStyle = red;
     wrapText(g, PLEDGE, CW).forEach(function(l){ y += 44; g.fillText(l, M, y); });
 
-    // 签名
     y += 40;
     var bx = M + 200, bw = 560, bh = 230;
     g.fillStyle = sub; g.font = "26px " + F; g.fillText("承诺人签名：", M, y + 60);
@@ -659,7 +711,10 @@
     var msg = downloaded ? "确认存档吗？" : "还没有下载登记单。\n存档后，顾客的照片和签名会从服务器删除，之后无法再生成登记单。\n\n仍要存档吗？";
     if (!confirm(msg)) return;
     var btn = $("btnConfirm"), id = curId; btn.disabled = true;
-    api("/confirm?id=" + encodeURIComponent(id), {name: cur.name, idno: cur.idno, mobile: cur.mobile, address: cur.address, items: r.items}).then(function(){
+    api("/confirm?id=" + encodeURIComponent(id), {
+      name: cur.name, idno: cur.idno, mobile: cur.mobile, address: cur.address,
+      items: r.items, payMethod: ($("payMethod") && $("payMethod").value || "").trim().slice(0, 40)
+    }).then(function(){
       toast("已确认存档。"); rec.loaded = false; rec.detail = {};
       closeReview(); loadPending();
     }).catch(function(e){ toast(errText(e), "err"); })
@@ -712,7 +767,7 @@
     var t = its.length ? '<table class="mini"><tr><th>品种</th><th>单价</th><th>数量</th><th>总额</th></tr>' +
       its.map(function(x){ return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.price) + '</td><td>' + esc(x.qty) + '</td><td>' + esc(x.amount) + '</td></tr>'; }).join("") + '</table>'
       : '<div class="rc-meta">没有物品明细。</div>';
-    return t + '<div class="rc-meta">登记时间：' + esc(d.submittedAt || "") + '<br>存档时间：' + esc(fmtFull(d.confirmedAt)) + '</div>' +
+    return t + '<div class="rc-meta">登记时间：' + esc(d.submittedAt || "") + '<br>存档时间：' + esc(fmtFull(d.confirmedAt)) + (d.payMethod ? '<br>收款方式：' + esc(d.payMethod) : '') + '</div>' +
       '<button class="btn ghost danger sm" type="button" data-del="' + esc(d.id) + '">删除这条存档</button>';
   }
   $("recList").addEventListener("click", function(e){
@@ -756,9 +811,9 @@
   $("dlCsv").addEventListener("click", function(){
     var btn = this; btn.disabled = true; var old = btn.textContent; btn.textContent = "准备中…";
     api("/records", queryBody({detail: true, limit: 500})).then(function(j){
-      var out = [["存档时间","登记时间","姓名","身份证号码","手机号码","居住地址","品种","单价","数量","总额"].join(",")];
+      var out = [["存档时间","登记时间","姓名","身份证号码","手机号码","居住地址","收款方式","品种","单价","数量","总额"].join(",")];
       (j.items || []).forEach(function(r){
-        var head = [csvCell(fmtFull(r.confirmedAt)), csvCell(r.submittedAt || ""), csvCell(r.name), textCell(r.idno), textCell(r.mobile), csvCell(r.address)];
+        var head = [csvCell(fmtFull(r.confirmedAt)), csvCell(r.submittedAt || ""), csvCell(r.name), textCell(r.idno), textCell(r.mobile), csvCell(r.address), csvCell(r.payMethod || "")];
         var its = (r.items && r.items.length) ? r.items : [{}];
         its.forEach(function(x){ out.push(head.concat([csvCell(x.name), csvCell(x.price), csvCell(x.qty), csvCell(x.amount)]).join(",")); });
       });
